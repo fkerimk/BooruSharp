@@ -262,24 +262,22 @@ namespace BooruSharp.Booru
         }
 
         // TODO: Handle limitrate
-
-        private protected async Task<string> GetJsonAsync(string url)
-        {
+        private async Task<string> GetJsonAsync(string url) {
+            
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             var message = new HttpRequestMessage(HttpMethod.Get, url);
             PreRequest(message);
             var msg = await HttpClient.SendAsync(message);
 
-            if (msg.StatusCode == HttpStatusCode.Forbidden)
-                throw new AuthentificationRequired();
-
-            if (msg.StatusCode == (HttpStatusCode)422)
-                throw new TooManyTags();
-
-            msg.EnsureSuccessStatusCode();
-
-            return await msg.Content.ReadAsStringAsync();
+            // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
+            switch (msg.StatusCode) {
+                
+                case (HttpStatusCode)422: throw new TooManyTags();
+                case HttpStatusCode.Forbidden: throw new AuthentificationRequired();
+                default: msg.EnsureSuccessStatusCode();
+                return await msg.Content.ReadAsStringAsync();
+            }
         }
 
         private protected Task<string> GetJsonAsync(Uri url)
@@ -308,14 +306,10 @@ namespace BooruSharp.Booru
             return HttpUtility.ParseQueryString(msg.RequestMessage.RequestUri.Query).Get("id");
         }
 
-        private Uri CreateUrl(Uri url, params string[] args)
-        {
+        private static Uri CreateUrl(Uri url, params string[] args) {
+            
             var builder = new UriBuilder(url);
-
-            if (builder.Query?.Length > 1)
-                builder.Query = builder.Query.Substring(1) + "&" + string.Join("&", args);
-            else
-                builder.Query = string.Join("&", args);
+            builder.Query = builder.Query.Length > 1 ? string.Concat(builder.Query.AsSpan(1), "&", string.Join("&", args)) : string.Join("&", args);
 
             return builder.Uri;
         }
