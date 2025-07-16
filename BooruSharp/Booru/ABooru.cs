@@ -6,6 +6,7 @@ using System.Collections;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web;
@@ -224,12 +225,12 @@ namespace BooruSharp.Booru
             }
         }
 
-        private protected Uri CreateQueryString(UrlFormat format, string query, string squery = "index")
-        {
+        private Uri CreateQueryString(UrlFormat format, string query, string squery = "index") {
+            
             string queryString;
 
-            switch (format)
-            {
+            switch (format) {
+                
                 case UrlFormat.PostIndexJson:
                     queryString = query + "/" + squery + ".json";
                     break;
@@ -254,8 +255,7 @@ namespace BooruSharp.Booru
                     queryString = $"api/v3/search/{query}s";
                     break;
 
-                default:
-                    return BaseUrl;
+                default: return BaseUrl;
             }
 
             return new Uri(BaseUrl + queryString);
@@ -267,6 +267,8 @@ namespace BooruSharp.Booru
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             var message = new HttpRequestMessage(HttpMethod.Get, url);
+            message.Headers.UserAgent.ParseAdd("BooruSharp");
+            
             PreRequest(message);
             var msg = await HttpClient.SendAsync(message);
 
@@ -274,7 +276,7 @@ namespace BooruSharp.Booru
             switch (msg.StatusCode) {
                 
                 case (HttpStatusCode)422: throw new TooManyTags();
-                case HttpStatusCode.Forbidden: throw new AuthentificationRequired();
+                case HttpStatusCode.Forbidden: throw new AuthentificationRequired(); // LINE 277
                 default: msg.EnsureSuccessStatusCode();
                 return await msg.Content.ReadAsStringAsync();
             }
@@ -299,28 +301,43 @@ namespace BooruSharp.Booru
             return GetXmlAsync(url.AbsoluteUri);
         }
 
-        private async Task<string> GetRandomIdAsync(string tags)
-        {
-            HttpResponseMessage msg = await HttpClient.GetAsync(BaseUrl + "index.php?page=post&s=random&tags=" + tags);
+        private async Task<string> GetRandomIdAsync(string tags)  {
+            
+            var msg = await HttpClient.GetAsync(BaseUrl + "index.php?page=post&s=random&tags=" + tags);
             msg.EnsureSuccessStatusCode();
-            return HttpUtility.ParseQueryString(msg.RequestMessage.RequestUri.Query).Get("id");
+            return HttpUtility.ParseQueryString(msg.RequestMessage!.RequestUri!.Query).Get("id");
         }
 
         private static Uri CreateUrl(Uri url, params string[] args) {
+
+            var delim = "&";
+            
+            if (url.ToString().Contains("danbooru.donmai.us")) delim = "$";
+            
+            
             
             var builder = new UriBuilder(url);
-            builder.Query = builder.Query.Length > 1 ? string.Concat(builder.Query.AsSpan(1), "&", string.Join("&", args)) : string.Join("&", args);
+            builder.Query = builder.Query.Length > 1 ? string.Concat(builder.Query.AsSpan(1), delim, string.Join(delim, args)) : string.Join(delim, args);
 
-            return builder.Uri;
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine(builder.Uri);
+            Console.ResetColor();
+            
+            var uri = builder.Uri.ToString();
+        
+            if (uri.Contains("gelbooru.com"))
+                uri = uri.Replace("&sort=random", "+sort:random");
+            
+            return new Uri(uri);
         }
 
-        private string TagsToString(string[] tags)
-        {
-            if (tags == null || !tags.Any())
-            {
+        private string TagsToString(string[] tags) {
+            
+            if (tags == null || tags.Length == 0) {
                 // Philomena doesn't support search with no tag so we search for all posts with ID > 0
                 return _format == UrlFormat.Philomena || _format == UrlFormat.BooruOnRails ? "q=id.gte:0" : "tags=";
             }
+            
             return (_format == UrlFormat.Philomena || _format == UrlFormat.BooruOnRails ? "q=" : "tags=")
                 + string.Join(_format == UrlFormat.Philomena || _format == UrlFormat.BooruOnRails ? "," : "+", tags.Select(Uri.EscapeDataString)).ToLowerInvariant();
         }

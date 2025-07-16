@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Xml;
 using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -22,13 +21,11 @@ public abstract partial class ABooru {
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="Search.FeatureUnavailable"/>
     /// <exception cref="System.Net.Http.HttpRequestException"/>
-    public virtual async Task<Search.Post.SearchResult> GetPostByMd5Async(string md5)
-    {
-        if (!HasPostByMd5API)
-            throw new Search.FeatureUnavailable();
+    public virtual async Task<Search.Post.SearchResult> GetPostByMd5Async(string md5) {
+        
+        if (!HasPostByMd5API) throw new Search.FeatureUnavailable();
 
-        if (md5 == null)
-            throw new ArgumentNullException(nameof(md5));
+        ArgumentNullException.ThrowIfNull(md5);
 
         return await GetSearchResultFromUrlAsync(CreateUrl(_imageUrl, GetLimit(1), "md5=" + md5));
     }
@@ -40,16 +37,19 @@ public abstract partial class ABooru {
     /// <returns>The task object representing the asynchronous operation.</returns>
     /// <exception cref="Search.FeatureUnavailable"/>
     /// <exception cref="System.Net.Http.HttpRequestException"/>
-    public virtual async Task<Search.Post.SearchResult> GetPostByIdAsync(int id)
-    {
-        if (!HasPostByIdAPI)
-            throw new Search.FeatureUnavailable();
+    public virtual async Task<Search.Post.SearchResult> GetPostByIdAsync(int id) {
+        
+        if (!HasPostByIdAPI) throw new Search.FeatureUnavailable();
 
-        if (_format == UrlFormat.Danbooru) return await GetSearchResultFromUrlAsync(BaseUrl + "posts/" + id + ".json");
-        if (_format == UrlFormat.Philomena) return await GetSearchResultFromUrlAsync($"{BaseUrl}api/v1/json/images/{id}");
-        if (_format == UrlFormat.BooruOnRails) return await GetSearchResultFromUrlAsync($"{BaseUrl}api/v3/posts/{id}");
-        if (_format == UrlFormat.PostIndexJson) return await GetSearchResultFromUrlAsync(_imageUrl + "?tags=id:" + id);
-        return await GetSearchResultFromUrlAsync(CreateUrl(_imageUrl, GetLimit(1), "id=" + id));
+        return _format switch {
+            
+            UrlFormat.Danbooru => await GetSearchResultFromUrlAsync(BaseUrl + "posts/" + id + ".json"),
+            UrlFormat.Philomena => await GetSearchResultFromUrlAsync($"{BaseUrl}api/v1/json/images/{id}"),
+            UrlFormat.BooruOnRails => await GetSearchResultFromUrlAsync($"{BaseUrl}api/v3/posts/{id}"),
+            UrlFormat.PostIndexJson => await GetSearchResultFromUrlAsync(_imageUrl + "?tags=id:" + id),
+            
+            _ => await GetSearchResultFromUrlAsync(CreateUrl(_imageUrl, GetLimit(1), "id=" + id))
+        };
     }
 
     /// <summary>
@@ -61,30 +61,30 @@ public abstract partial class ABooru {
     /// <exception cref="Search.FeatureUnavailable"/>
     /// <exception cref="System.Net.Http.HttpRequestException"/>
     /// <exception cref="Search.TooManyTags"/>
-    public virtual async Task<int> GetPostCountAsync(params string[] tagsArg)
-    {
+    public virtual async Task<int> GetPostCountAsync(params string[] tagsArg) {
+        
         if (!HasPostCountAPI)
             throw new Search.FeatureUnavailable();
 
-        string[] tags = tagsArg != null
+        var tags = tagsArg != null
             ? tagsArg.Where(tag => !string.IsNullOrWhiteSpace(tag)).ToArray()
-            : Array.Empty<string>();
+            : [];
 
         if (NoMoreThanTwoTags && tags.Length > LimitedTagsSearchCount)
             throw new Search.TooManyTags();
 
-        if (_format == UrlFormat.Philomena || _format == UrlFormat.BooruOnRails)
-        {
+        if (_format is UrlFormat.Philomena or UrlFormat.BooruOnRails) {
+            
             var url = CreateUrl(_imageUrl, GetLimit(1), TagsToString(tags));
             var json = await GetJsonAsync(url);
             var token = (JToken)JsonConvert.DeserializeObject(json);
-            return token["total"].Value<int>();
-        }
-        else
-        {
+            return token!["total"]!.Value<int>();
+            
+        } else {
+            
             var url = CreateUrl(_imageUrlXml, GetLimit(1), TagsToString(tags));
-            XmlDocument xml = await GetXmlAsync(url);
-            return int.Parse(xml.ChildNodes.Item(1).Attributes[0].InnerXml);
+            var xml = await GetXmlAsync(url);
+            return int.Parse(xml.ChildNodes.Item(1)!.Attributes![0].InnerXml);
         }
     }
 
@@ -134,12 +134,11 @@ public abstract partial class ABooru {
             
             case UrlFormat.Philomena:
             case UrlFormat.BooruOnRails:
-                return await GetSearchResultFromUrlAsync(CreateUrl(_imageUrl, GetLimit(1), tagString, "sf=random"));
-            default:
-                return NoMoreThanTwoTags
-                    // +order:random count as a tag so we use random=true instead to save one
-                    ? await GetSearchResultFromUrlAsync(CreateUrl(_imageUrl, GetLimit(1), tagString, "random=true"))
-                    : await GetSearchResultFromUrlAsync(CreateUrl(_imageUrl, GetLimit(1), tagString) + "+order:random");
+                return await GetSearchResultFromUrlAsync(CreateUrl(_imageUrl, GetLimit(1), tagString, "random=true", $"login={Auth.UserId}", $"api_key={Auth.PasswordHash}"));
+            
+            default: return NoMoreThanTwoTags
+                ? await GetSearchResultFromUrlAsync(CreateUrl(_imageUrl, GetLimit(1), tagString, "random=true", $"login={Auth.UserId}", $"api_key={Auth.PasswordHash}"))
+                : await GetSearchResultFromUrlAsync(CreateUrl(_imageUrl, GetLimit(1), tagString, "order=random", $"login={Auth.UserId}", $"api_key={Auth.PasswordHash}"));
         }
     }
 
@@ -153,29 +152,39 @@ public abstract partial class ABooru {
     /// <exception cref="Search.FeatureUnavailable"/>
     /// <exception cref="System.Net.Http.HttpRequestException"/>
     /// <exception cref="Search.TooManyTags"/>
-    public virtual async Task<Search.Post.SearchResult[]> GetRandomPostsAsync(int limit, params string[] tagsArg)
-    {
+    public async Task<Search.Post.SearchResult[]> GetRandomPostsAsync(int limit, params string[] tagsArg) {
+        
         if (!HasMultipleRandomAPI)
             throw new Search.FeatureUnavailable();
 
-        string[] tags = tagsArg != null
+        var tags = tagsArg != null
             ? tagsArg.Where(tag => !string.IsNullOrWhiteSpace(tag)).ToArray()
-            : Array.Empty<string>();
+            : [];
 
         if (NoMoreThanTwoTags && tags.Length > LimitedTagsSearchCount)
             throw new Search.TooManyTags();
 
-        string tagString = TagsToString(tags);
+        var tagString = TagsToString(tags);
 
-        if (_format == UrlFormat.IndexPhp)
-            return await GetSearchResultsFromUrlAsync(CreateUrl(_imageUrl, GetLimit(limit), tagString) + "+sort:random");
-        if (_format == UrlFormat.Philomena || _format == UrlFormat.BooruOnRails)
-            return await GetSearchResultsFromUrlAsync(CreateUrl(_imageUrl, GetLimit(limit), tagString, "sf=random"));
-        else if (NoMoreThanTwoTags)
-            // +order:random count as a tag so we use random=true instead to save one
-            return await GetSearchResultsFromUrlAsync(CreateUrl(_imageUrl, GetLimit(limit), tagString, "random=true"));
-        else
-            return await GetSearchResultsFromUrlAsync(CreateUrl(_imageUrl, GetLimit(limit), tagString) + "+order:random");
+        // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
+        switch (_format) {
+            
+            case UrlFormat.IndexPhp:
+                return await GetSearchResultsFromUrlAsync(CreateUrl(_imageUrl, GetLimit(limit), tagString) + "+sort:random");
+            
+            case UrlFormat.Philomena:
+            case UrlFormat.BooruOnRails:
+                return await GetSearchResultsFromUrlAsync(CreateUrl(_imageUrl, GetLimit(limit), tagString, "sf=random"));
+            
+            default: {
+
+                if (NoMoreThanTwoTags)
+                    // +order:random count as a tag so we use random=true instead to save one
+                    return await GetSearchResultsFromUrlAsync(CreateUrl(_imageUrl, GetLimit(limit), tagString, "random=true"));
+                
+                return await GetSearchResultsFromUrlAsync(CreateUrl(_imageUrl, GetLimit(limit), tagString) + "+order:random");
+            }
+        }
     }
 
     /// <summary>

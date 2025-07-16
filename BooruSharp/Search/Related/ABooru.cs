@@ -16,24 +16,21 @@ namespace BooruSharp.Booru
         /// <exception cref="ArgumentNullException"/>
         /// <exception cref="Search.FeatureUnavailable"/>
         /// <exception cref="System.Net.Http.HttpRequestException"/>
-        public virtual async Task<Search.Related.SearchResult[]> GetRelatedAsync(string tag)
-        {
-            if (!HasRelatedAPI)
-                throw new Search.FeatureUnavailable();
+        public async Task<Search.Related.SearchResult[]> GetRelatedAsync(string tag) {
+            
+            if (!HasRelatedAPI) throw new Search.FeatureUnavailable();
 
-            if (tag == null)
-                throw new ArgumentNullException(nameof(tag));
+            ArgumentNullException.ThrowIfNull(tag);
 
-            bool isDanbooruFormat = _format == UrlFormat.Danbooru;
+            var isDanbooruFormat = _format == UrlFormat.Danbooru;
 
-            var content = JsonConvert.DeserializeObject<JObject>(
-                await GetJsonAsync(CreateUrl(_relatedUrl, (isDanbooruFormat ? "query" : "tags") + "=" + tag)));
+            var content = JsonConvert.DeserializeObject<JObject>(await GetJsonAsync(CreateUrl(_relatedUrl, (isDanbooruFormat ? "query" : "tags") + "=" + tag)));
 
             var jsonArray = (JArray)(isDanbooruFormat
                 ? content["tags"]
                 : content[content.Properties().First().Name]);
 
-            return jsonArray.Select(GetRelatedSearchResult).ToArray();
+            return jsonArray!.Select(GetRelatedSearchResult).ToArray();
         }
     }
 }

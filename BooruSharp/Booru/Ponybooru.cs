@@ -21,7 +21,7 @@ namespace BooruSharp.Booru
         public override bool IsSafe => false;
 
         /// <inheritdoc/>
-        protected override int FilterID => 2;
+        protected override int FilterId => 2;
 
         protected override void PreRequest(HttpRequestMessage message)
         {
@@ -33,7 +33,7 @@ namespace BooruSharp.Booru
             }
             else
             {
-                query["filter_id"] = $"{FilterID}"; // filter 2 for Ponybooru still hide stuff so we only add it if auth isn't given
+                query["filter_id"] = $"{FilterId}"; // filter 2 for Ponybooru still hide stuff so we only add it if auth isn't given
             }
             uriBuilder.Query = query.ToString();
             message.RequestUri = new Uri(uriBuilder.ToString());

@@ -55,81 +55,63 @@ namespace BooruSharp.Booru
         /// <exception cref="ArgumentNullException"/>
         /// <exception cref="Search.FeatureUnavailable"/>
         /// <exception cref="System.Net.Http.HttpRequestException"/>
-        public virtual async Task<Search.Tag.SearchResult[]> GetTagsAsync(string name)
-        {
-            if (!HasTagByIdAPI)
-                throw new Search.FeatureUnavailable();
+        public async Task<Search.Tag.SearchResult[]> GetTagsAsync(string name) {
+            
+            if (!HasTagByIdAPI) throw new Search.FeatureUnavailable();
 
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
+            ArgumentNullException.ThrowIfNull(name);
 
             var urlTags = new List<string> { SearchArg(_format == UrlFormat.Philomena || _format == UrlFormat.BooruOnRails ? "q" : "name") + name };
 
-            if (_format == UrlFormat.PostIndexJson)
-                urlTags.Add("limit=0");
+            if (_format == UrlFormat.PostIndexJson) urlTags.Add("limit=0");
 
             var url = CreateUrl(_tagUrl, urlTags.ToArray());
 
             var enumerable = await GetTagEnumerableSearchResultAsync(url);
-            if (TagsUseXml)
-            {
+            
+            if (TagsUseXml) {
+                
                 // Can't use LINQ with XmlNodes so let's use list here.
                 var results = new List<Search.Tag.SearchResult>(((XmlElement)enumerable).ChildNodes.Count);
-
-                foreach (var node in enumerable)
-                {
-                    results.Add(GetTagSearchResult(node));
-                }
+                results.AddRange(from object node in enumerable select GetTagSearchResult(node));
 
                 return results.ToArray();
             }
-            else
-            {
-                return ((JArray)enumerable).Select(GetTagSearchResult).ToArray();
-            }
+
+            return ((JArray)enumerable).Select(GetTagSearchResult).ToArray();
         }
 
-        private async Task<Search.Tag.SearchResult> SearchTagAsync(string name, int? id)
-        {
-            if (_format == UrlFormat.Philomena)
-            {
+        private async Task<Search.Tag.SearchResult> SearchTagAsync(string name, int? id) {
+            
+            if (_format == UrlFormat.Philomena) {
+                
                 var tagToken = JsonConvert.DeserializeObject<JToken>(await GetJsonAsync($"{BaseUrl}api/v1/json/tags/{name}"))["tag"];
                 return GetTagSearchResult(tagToken);
             }
-            else
-            {
-                var urlTags = new List<string>();
 
-                if (name == null)
-                {
-                    urlTags.Add(SearchArg("id") + id);
-                }
-                else
-                {
-                    urlTags.Add(SearchArg(_format == UrlFormat.BooruOnRails ? "q" : "name") + name);
-                }
+            var urlTags = new List<string>();
 
-                if (_format == UrlFormat.PostIndexJson)
-                    urlTags.Add("limit=0");
+            if (name == null) urlTags.Add(SearchArg("id") + id);
+            else urlTags.Add(SearchArg(_format == UrlFormat.BooruOnRails ? "q" : "name") + name);
 
-                var url = CreateUrl(_tagUrl, urlTags.ToArray());
-                IEnumerable enumerable = await GetTagEnumerableSearchResultAsync(url);
+            if (_format == UrlFormat.PostIndexJson) urlTags.Add("limit=0");
 
-                foreach (object item in enumerable)
-                {
-                    var result = GetTagSearchResult(item);
+            var url = CreateUrl(_tagUrl, urlTags.ToArray());
+            var enumerable = await GetTagEnumerableSearchResultAsync(url);
 
-                    if ((name == null && id == result.ID) || (name != null && name == result.Name))
-                        return result;
-                }
+            foreach (var item in enumerable) {
+                
+                var result = GetTagSearchResult(item);
+
+                if ((name == null && id == result.ID) || (name != null && name == result.Name)) return result;
             }
 
             throw new Search.InvalidTags();
         }
 
-        private protected Search.Tag.TagType StringToTagType(string value)
-        {
-            StringComparer comparer = StringComparer.OrdinalIgnoreCase;
+        private protected Search.Tag.TagType StringToTagType(string value) {
+            
+            var comparer = StringComparer.OrdinalIgnoreCase;
 
             if (comparer.Equals(value, "tag"))
                 return Search.Tag.TagType.Trivia; // BooruSharp rename the tag "Tag" by "Trivia" for more clarity
